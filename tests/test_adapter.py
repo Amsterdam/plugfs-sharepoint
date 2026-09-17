@@ -68,7 +68,7 @@ def transport() -> httpx.MockTransport:
 
         return httpx.Response(404, json={"error": "not found"})
 
-    transport.calls = calls  # ty: ignore[unresolved-attribute]
+    transport.calls = calls  # type: ignore[attr-defined]
     return httpx.MockTransport(handler)
 
 
