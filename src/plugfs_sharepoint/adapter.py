@@ -159,14 +159,10 @@ class SharepointAdapter(Adapter):
     async def get_iterator(self, path: str) -> AsyncIterator[bytes]:
         response = await self._get_drive_item_content(path)
 
-        async def iterate() -> AsyncIterator[bytes]:
-            try:
-                async for chunk in response.aiter_bytes():
-                    yield chunk
-            finally:
-                await response.aclose()
-
-        return iterate()
+        try:
+            return response.aiter_bytes()
+        finally:
+            await response.aclose()
 
     async def get_file(self, path: str) -> SharepointFile:
         metadata = await self.get_metadata(path)
