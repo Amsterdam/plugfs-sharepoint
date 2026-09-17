@@ -1,0 +1,51 @@
+[project]
+name = "plugfs-sharepoint"
+version = "0.1.0"
+description = "SharePoint adapter for plugfs"
+readme = "README.md"
+license = "EUPL-1.2"
+authors = [
+    { name = "vanbuiten", email = "david.vanbuiten@gmail.com" }
+]
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "httpx>=0.28.1,<0.29.0",
+    "plugfs>=1.0.2,<2.0.0",
+    "tenacity>=9.0.0,<10.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Amsterdam/plugfs-sharepoint"
+
+[dependency-groups]
+dev = [
+    "pytest-anyio",
+    "pytest>=9.0.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.12.10",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ty.environment]
+root = ["./src", "./tests"]
+
+[tool.isort]
+profile = "black"
+overwrite_in_place = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "--cov=plugfs_sharepoint --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["plugfs_sharepoint"]
