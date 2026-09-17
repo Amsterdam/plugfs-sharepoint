@@ -39,9 +39,16 @@ class _SharepointSite:
     drive_id: str
 
 
+@dataclass
+class SharepointMetadata:
+    size: int
+    quick_xor_hash: str | None = None
+
+
 @final
 class SharepointFile(File):
     _adapter: SharepointAdapter
+    _metadata: SharepointMetadata | None = None
 
     def __init__(self, path: str, adapter: SharepointAdapter) -> None:
         super().__init__(path)
@@ -49,7 +56,13 @@ class SharepointFile(File):
 
     @property
     async def size(self) -> int:
-        return await self._adapter.get_size(self._path)
+        metadata = await self._ensure_metadata()
+        return metadata.size
+
+    @property
+    async def quick_xor_hash(self) -> str | None:
+        metadata = await self._ensure_metadata()
+        return metadata.quick_xor_hash
 
     async def read(self) -> bytes:
         return await self._adapter.read(self._path)
@@ -59,6 +72,12 @@ class SharepointFile(File):
 
     async def delete(self) -> None:
         raise NotImplementedError("SharePoint adapter is read-only")
+
+    async def _ensure_metadata(self) -> SharepointMetadata:
+        if self._metadata is None:
+            self._metadata = await self._adapter.get_metadata(self._path)
+        assert self._metadata is not None
+        return self._metadata
 
 
 @final
@@ -150,8 +169,10 @@ class SharepointAdapter(Adapter):
         return iterate()
 
     async def get_file(self, path: str) -> SharepointFile:
-        await self._get_drive_item(path)
-        return SharepointFile(path, self)
+        metadata = await self.get_metadata(path)
+        file = SharepointFile(path, self)
+        file._metadata = metadata
+        return file
 
     async def write(self, path: str, data: bytes) -> File:
         raise NotImplementedError("SharePoint adapter is read-only")
@@ -181,8 +202,18 @@ class SharepointAdapter(Adapter):
         return response
 
     async def get_size(self, path: str) -> int:
+        metadata = await self.get_metadata(path)
+        return metadata.size
+
+    async def get_metadata(self, path: str) -> SharepointMetadata:
         item = await self._get_drive_item(path)
-        return int(cast(int | str, item["size"]))
+        file_info = cast(dict[str, Any], item.get("file", {}))
+        hashes = cast(dict[str, Any], file_info.get("hashes", {}))
+
+        return SharepointMetadata(
+            size=int(cast(int | str, item["size"])),
+            quick_xor_hash=cast(str | None, hashes.get("quickXorHash")),
+        )
 
     async def _get_drive_item(self, path: str) -> dict[str, Any]:
         site = self._require_site()

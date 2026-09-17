@@ -36,7 +36,18 @@ def transport() -> httpx.MockTransport:
             return httpx.Response(200, content=b"folder-bytes")
 
         if request.url.path == "/v1.0/drives/drive-1/root:/docs/report.txt":
-            return httpx.Response(200, json={"id": "file-id", "size": 12})
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file-id",
+                    "size": 12,
+                    "file": {
+                        "hashes": {
+                            "quickXorHash": "abc123",
+                        }
+                    },
+                },
+            )
 
         if request.url.path == "/v1.0/drives/drive-1/root:/docs/report.txt:/content":
             return httpx.Response(200, content=b"hello world")
@@ -94,7 +105,18 @@ def retry_transport() -> httpx.MockTransport:
             return httpx.Response(200, json={"id": "drive-1"})
 
         if request.url.path == "/v1.0/drives/drive-1/root:/docs/report.txt":
-            return httpx.Response(200, json={"id": "file-id", "size": 12})
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file-id",
+                    "size": 12,
+                    "file": {
+                        "hashes": {
+                            "quickXorHash": "abc123",
+                        }
+                    },
+                },
+            )
 
         if request.url.path == "/v1.0/drives/drive-1/root:/docs/report.txt:/content":
             return httpx.Response(200, content=b"hello world")
@@ -118,6 +140,7 @@ async def test_create_and_read_file(client: httpx.AsyncClient) -> None:
     assert isinstance(file, SharepointFile)
     assert await file.read() == b"hello world"
     assert await file.size == 12
+    assert await file.quick_xor_hash == "abc123"
     assert await _collect_bytes(await file.get_iterator()) == b"hello world"
 
     await adapter.aclose()
@@ -140,6 +163,24 @@ async def test_list_maps_directories_and_files(client: httpx.AsyncClient) -> Non
     assert items[0].path == "/docs/report.txt"
     assert isinstance(items[1], Directory)
     assert items[1].path == "/docs/docs"
+
+    await adapter.aclose()
+
+
+@pytest.mark.anyio
+async def test_get_metadata_reads_quick_xor_hash(client: httpx.AsyncClient) -> None:
+    adapter = SharepointAdapter(
+        client,
+        TokenFactory(),
+        "example.sharepoint.com",
+        "/sites/MySite",
+    )
+    await adapter._initialize()
+
+    metadata = await adapter.get_metadata("/docs/report.txt")
+
+    assert metadata.size == 12
+    assert metadata.quick_xor_hash == "abc123"
 
     await adapter.aclose()
 
