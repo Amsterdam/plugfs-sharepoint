@@ -1,0 +1,11 @@
+services:
+  plugfs-sharepoint:
+    image: amsterdam/plugfs-sharepoint
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13}
+    volumes:
+      - ".:/app"
+
