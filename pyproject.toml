@@ -5,7 +5,8 @@ description = "SharePoint adapter for plugfs"
 readme = "README.md"
 license = "EUPL-1.2"
 authors = [
-    { name = "David van Buiten", email = "d.van.buiten@amsterdam.nl" }
+    { name = "David van Buiten", email = "d.van.buiten@amsterdam.nl" },
+    { name = "Youri Westerman", email = "y.westerman@amsterdam.nl" }
 ]
 requires-python = ">=3.13,<4.0"
 dependencies = [
