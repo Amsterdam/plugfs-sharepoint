@@ -3,6 +3,7 @@ name: Package tests
 on:
   pull_request:
     paths:
+      - ".github/**"
       - "src/**"
       - "tests/**"
       - "pyproject.toml"
