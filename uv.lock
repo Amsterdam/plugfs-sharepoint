@@ -870,16 +870,16 @@ wheels = [
 
 [[package]]
 name = "plugfs"
-version = "1.0.2"
+version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp", extra = ["speedups"] },
     { name = "azure-storage-blob" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/a2/8979b5eea17cbe3d43aa1c1a3449558bef944f1ba0db3827bab51e53a825/plugfs-1.0.2.tar.gz", hash = "sha256:522b0222c2f44079b5556bd09286b82f5c00c1206c360e6f52311163bca81a28", size = 4623, upload-time = "2026-07-02T12:27:21.766Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/4c/1b3770c2bcf4af32ff92a625f97a3cd05727946465b97362f341d238b23a/plugfs-1.0.3.tar.gz", hash = "sha256:476f3977fdcbfa12cf0d70d788edb63337a4ce91698144d0f04869a03ce57fd1", size = 4617, upload-time = "2026-09-17T12:05:12.687Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/05/ce91c5f2b5b068400b146c2c5a30df4c78dd6ddce9e10639d9be5b76dc73/plugfs-1.0.2-py3-none-any.whl", hash = "sha256:107de7576781d07cc450bfbf9b74b3695adca39f695128849ff89bece82a47fe", size = 6242, upload-time = "2026-07-02T12:27:20.884Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/7d/240b2881fbbd7cf99479b50949143ba924561b8e16a867abaaab78adce0e/plugfs-1.0.3-py3-none-any.whl", hash = "sha256:2f6e505b8ca2f6c88ffb14295bafe719286a26cc328bf803799610b2dfd5ab8e", size = 6245, upload-time = "2026-09-17T12:05:11.74Z" },
 ]
 
 [[package]]
