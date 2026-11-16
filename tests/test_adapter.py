@@ -1,10 +1,13 @@
 from collections.abc import AsyncIterator
+from functools import partial
+from typing import Any, cast
+from unittest.mock import Mock
 
 import httpx
 import pytest
 from plugfs.filesystem import Directory, Filesystem
 
-from plugfs_sharepoint import SharepointAdapter, SharepointFile
+from plugfs_sharepoint import HttpxClientKwargs, SharepointAdapter, SharepointFile
 from plugfs_sharepoint.adapter import _is_retryable_http_error
 
 
@@ -192,9 +195,10 @@ async def test_create_uses_graph_resolution(monkeypatch: pytest.MonkeyPatch) -> 
         transport=transport_for_create(),
     )
 
+    client_factory = Mock(return_value=mock_client)
     monkeypatch.setattr(
         "plugfs_sharepoint.adapter.httpx.AsyncClient",
-        lambda **_: mock_client,
+        client_factory,
     )
 
     adapter = await SharepointAdapter.create(
@@ -202,12 +206,132 @@ async def test_create_uses_graph_resolution(monkeypatch: pytest.MonkeyPatch) -> 
         "example.sharepoint.com",
         "/sites/MySite",
     )
+    client_factory.assert_called_once_with(
+        base_url="https://graph.microsoft.com/v1.0",
+        follow_redirects=False,
+        max_redirects=20,
+    )
 
     file = await adapter.get_file("/docs/report.txt")
     assert isinstance(file, SharepointFile)
     assert await file.read() == b"hello world"
 
     await adapter.aclose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("options", "expected_follow_redirects", "expected_max_redirects"),
+    [
+        (None, False, 20),
+        ({}, False, 20),
+        ({"follow_redirects": False}, False, 20),
+        ({"follow_redirects": True}, True, 20),
+        ({"max_redirects": 5}, False, 5),
+        ({"follow_redirects": True, "max_redirects": 5}, True, 5),
+    ],
+)
+async def test_create_forwards_httpx_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+    options: HttpxClientKwargs | None,
+    expected_follow_redirects: bool,
+    expected_max_redirects: int,
+) -> None:
+    original_options = options.copy() if options is not None else None
+    mock_client = httpx.AsyncClient(
+        base_url="https://graph.microsoft.com/v1.0",
+        transport=transport_for_create(),
+    )
+    client_factory = Mock(return_value=mock_client)
+    monkeypatch.setattr("plugfs_sharepoint.adapter.httpx.AsyncClient", client_factory)
+
+    adapter = await SharepointAdapter.create(
+        TokenFactory(),
+        "example.sharepoint.com",
+        "/sites/MySite",
+        httpx_kwargs=options,
+    )
+    try:
+        client_factory.assert_called_once_with(
+            base_url="https://graph.microsoft.com/v1.0",
+            follow_redirects=expected_follow_redirects,
+            max_redirects=expected_max_redirects,
+        )
+        assert options == original_options
+        assert not mock_client.is_closed
+    finally:
+        await adapter.aclose()
+    assert mock_client.is_closed
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("key", ["timeout", "base_url", "follow_redirect"])
+async def test_create_rejects_unsupported_httpx_kwargs(
+    monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    client_factory = Mock()
+    initialize = Mock()
+    monkeypatch.setattr("plugfs_sharepoint.adapter.httpx.AsyncClient", client_factory)
+    monkeypatch.setattr(SharepointAdapter, "_initialize", initialize)
+
+    with pytest.raises(TypeError, match=f"unexpected keyword argument '{key}'"):
+        await SharepointAdapter.create(
+            TokenFactory(),
+            "example.sharepoint.com",
+            "/sites/MySite",
+            httpx_kwargs=cast(Any, {key: True}),
+        )
+
+    client_factory.assert_not_called()
+    initialize.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_create_httpx_kwargs_is_keyword_only() -> None:
+    with pytest.raises(TypeError, match="positional"):
+        await cast(Any, SharepointAdapter.create)(
+            TokenFactory(),
+            "example.sharepoint.com",
+            "/sites/MySite",
+            {"follow_redirects": True},
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("max_redirects", "should_succeed"),
+    [(2, True), (1, False)],
+)
+async def test_create_applies_redirect_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    max_redirects: int,
+    should_succeed: bool,
+) -> None:
+    client_factory = Mock(
+        side_effect=partial(
+            httpx.AsyncClient,
+            transport=redirect_transport(),
+        )
+    )
+    monkeypatch.setattr("plugfs_sharepoint.adapter.httpx.AsyncClient", client_factory)
+
+    adapter = await SharepointAdapter.create(
+        TokenFactory(),
+        "example.sharepoint.com",
+        "/sites/MySite",
+        httpx_kwargs={
+            "follow_redirects": True,
+            "max_redirects": max_redirects,
+        },
+    )
+    try:
+        if should_succeed:
+            assert await adapter.read("/docs/report.txt") == b"hello world"
+        else:
+            with pytest.raises(httpx.TooManyRedirects):
+                await adapter.read("/docs/report.txt")
+    finally:
+        await adapter.aclose()
 
 
 @pytest.mark.anyio
@@ -229,8 +353,10 @@ async def test_get_iterator_streams_and_closes_response(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("options", [None, {"follow_redirects": True}])
 async def test_create_closes_client_when_initialization_fails(
     monkeypatch: pytest.MonkeyPatch,
+    options: HttpxClientKwargs | None,
 ) -> None:
     class FailingClient:
         def __init__(self) -> None:
@@ -256,6 +382,7 @@ async def test_create_closes_client_when_initialization_fails(
             TokenFactory(),
             "example.sharepoint.com",
             "/sites/MySite",
+            httpx_kwargs=options,
         )
 
     assert failing_client.closed is True
@@ -413,5 +540,29 @@ def transport_for_create() -> httpx.MockTransport:
             return httpx.Response(200, json={"value": []})
 
         return httpx.Response(404, json={"error": "not found"})
+
+    return httpx.MockTransport(handler)
+
+
+def redirect_transport() -> httpx.MockTransport:
+    graph_transport = transport_for_create()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/drives/drive-1/root:/docs/report.txt:/content":
+            return httpx.Response(
+                302,
+                headers={"Location": "https://downloads.example.com/first"},
+            )
+
+        if request.url == httpx.URL("https://downloads.example.com/first"):
+            return httpx.Response(
+                302,
+                headers={"Location": "https://downloads.example.com/final"},
+            )
+
+        if request.url == httpx.URL("https://downloads.example.com/final"):
+            return httpx.Response(200, content=b"hello world")
+
+        return graph_transport.handle_request(request)
 
     return httpx.MockTransport(handler)

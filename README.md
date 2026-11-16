@@ -45,6 +45,28 @@ async def build_filesystem() -> Filesystem:
     return Filesystem(adapter)
 ```
 
+### HTTP client options
+
+Pass supported HTTPX client options through the keyword-only `httpx_kwargs`
+argument:
+
+```python
+from plugfs_sharepoint import HttpxClientKwargs, SharepointAdapter
+
+options: HttpxClientKwargs = {"follow_redirects": True, "max_redirects": 3}
+
+adapter = await SharepointAdapter.create(
+    TokenFactory(),
+    "example.sharepoint.com",
+    "/sites/MySite",
+    httpx_kwargs=options,
+)
+```
+
+Currently, only `follow_redirects: bool` and `max_redirects: int` are supported.
+Unsupported keys raise `TypeError` before the client is created. Value types are
+checked by type checkers, not validated at runtime.
+
 Quick smoke test:
 
 ```python
