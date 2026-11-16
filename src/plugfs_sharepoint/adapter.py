@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, final, runtime_checkable
+from typing import Any, Protocol, TypedDict, cast, final, runtime_checkable
 
 import httpx
 from plugfs.filesystem import (
@@ -23,6 +23,21 @@ from tenacity import (
 @runtime_checkable
 class AccessTokenFactory(Protocol):
     async def __call__(self) -> str: ...
+
+
+class HttpxClientKwargs(TypedDict, total=False):
+    follow_redirects: bool
+    max_redirects: int
+
+
+def _create_httpx_client(
+    *, follow_redirects: bool = False, max_redirects: int = 20
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url="https://graph.microsoft.com/v1.0",
+        follow_redirects=follow_redirects,
+        max_redirects=max_redirects,
+    )
 
 
 def _is_retryable_http_error(error: BaseException) -> bool:
@@ -107,8 +122,10 @@ class SharepointAdapter(Adapter):
         token_factory: AccessTokenFactory,
         site_host: str,
         site_path: str,
+        *,
+        httpx_kwargs: HttpxClientKwargs | None = None,
     ) -> SharepointAdapter:
-        client = httpx.AsyncClient(base_url="https://graph.microsoft.com/v1.0")
+        client = _create_httpx_client(**(httpx_kwargs or {}))
         adapter = cls(client, token_factory, site_host, site_path)
 
         try:
